@@ -2,7 +2,7 @@
 [![Crates.io](https://img.shields.io/crates/v/pdf_structure_viewer)](https://crates.io/crates/pdf_structure_viewer/)
 [![API Docs](https://img.shields.io/badge/docs.rs-pdf_structure_viewer-blue)](https://docs.rs/pdf_structure_viewer/latest/)
 
-View the structure of a PDF.
+Inspect how the PDF's structure looks.
 This tool is useful for when working with PDFs and/or [`lopdf`][lopdf].
 
 This application is used [`lopdf`][lopdf] internally to decode the structure of the pdf.

@@ -1,5 +1,6 @@
 [package]
 name = "pdf_structure_viewer"
+description = "Inspect how the PDF's structure looks."
 version = "0.1.0"
 authors = ["Ralph Bisschops <ralph.bisschops.dev@gmail.com>"]
 edition = "2021"
