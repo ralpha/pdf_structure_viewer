@@ -39,7 +39,9 @@ struct Opts {
 
 #[derive(Debug, Clone, StructOpt)]
 enum Command {
+    /// Print general info about the PDF.
     Info,
+    /// Print the structure of the PDF in a tree structure.
     Tree {
         /// How deep the tree should be printed.
         ///
@@ -102,6 +104,8 @@ enum Command {
         #[structopt(long)]
         hide_legend: bool,
     },
+    /// Print the internal structure of the PDF.
+    /// This is similar to how the PDF is stored in the file.
     Structure,
 }
 

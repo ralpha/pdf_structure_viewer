@@ -14,6 +14,8 @@ This project was inspired by: https://pdfux.com/inspect-pdf/
 
 This tool was developed with support from [MyEmma.nl](https://www.myemma.nl/).
 
+![Tree view of a small file](images/tree_view_small_pdf.png)
+
 ## Extra info
 
 Most people using this tool will most likely want to know more about the structure of PDFs.
