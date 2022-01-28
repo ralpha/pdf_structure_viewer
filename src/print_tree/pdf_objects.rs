@@ -52,7 +52,7 @@ pub fn get_object_print_info(
             symbol_style: Style::new(Color::Green).bold(),
             symbol: "Nm",
             type_name: "Name",
-            value: format!("'{}'", String::from_utf8_lossy(name_value).to_string()),
+            value: format!("'{}'", String::from_utf8_lossy(name_value)),
             ..Default::default()
         },
         Object::String(string_value, string_format) => match string_format {
