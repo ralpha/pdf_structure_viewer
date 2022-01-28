@@ -1,19 +1,17 @@
 mod cursor_info;
 mod legend;
+mod pdf_content_stream;
 mod pdf_objects;
+mod stream_operations;
 mod tree_display_settings;
 
-use cursor_info::{CursorInfo, DepthInfo};
+pub use cursor_info::TreeCursorSettings;
+use cursor_info::{DepthInfo, TreeCursorInfo};
 use legend::print_legend;
 use lopdf::{Dictionary, Document, Error, Object};
 pub use pdf_objects::{get_object_print_info, ObjectPrintInfo};
 pub use tree_display_settings::TreeDisplaySettings;
 use yansi::{Color, Paint, Style};
-
-pub(self) static TAB_WIDTH: usize = 2;
-pub(self) static ARROW_LAST_CHAR: &str = "└";
-pub(self) static ARROW_CHAR: &str = "├";
-pub(self) static INDENT_CHAR: &str = "│";
 
 lazy_static::lazy_static! {
     pub(self) static ref TREE_STYLE: Style = Style::new(Color::Cyan).dimmed();
@@ -23,15 +21,17 @@ lazy_static::lazy_static! {
     pub(self) static ref EXPAND_INFO_STYLE: Style = Style::new(Color::Default).dimmed().italic();
     pub(self) static ref EXTRA_INFO_STYLE: Style = Style::new(Color::Default).italic();
     pub(self) static ref SKIPPED_STYLE: Style = Style::new(Color::Blue).italic();
+    pub(self) static ref ERROR_STYLE: Style = Style::new(Color::Red).bold();
 }
 
 pub fn print_pdf_tree(
     display_settings: &TreeDisplaySettings,
+    tree_cursor_settings: &TreeCursorSettings,
     raw_doc: &Document,
     file_name: String,
 ) -> Result<(), Error> {
     let trailer = &raw_doc.trailer;
-    let cursor = CursorInfo::default();
+    let cursor = TreeCursorInfo::new(tree_cursor_settings);
 
     if display_settings.display_legend {
         print_legend();
@@ -101,7 +101,7 @@ pub fn print_pdf_object_content(
     display_settings: &TreeDisplaySettings,
     obj: &Object,
     raw_doc: &Document,
-    cursor: &CursorInfo,
+    cursor: &TreeCursorInfo,
 ) -> Result<(), Error> {
     match obj {
         Object::Null => {}
@@ -119,8 +119,7 @@ pub fn print_pdf_object_content(
                     } else if index == array_count - 2 {
                         // print `...`
                         let skipped_items = array_count - display_limit.max(2);
-                        print_subitem(
-                            cursor,
+                        cursor.print_subitem(
                             SKIPPED_STYLE
                                 .paint(format!("...skipped {} items...", skipped_items))
                                 .to_string(),
@@ -138,11 +137,7 @@ pub fn print_pdf_object_content(
                     name: None,
                     indent_line: !is_last,
                 });
-                print_subitem(
-                    cursor,
-                    get_pdf_object_info(display_settings, None, item)?,
-                    is_last,
-                );
+                cursor.print_subitem(get_pdf_object_info(display_settings, None, item)?, is_last);
                 print_pdf_object_content(display_settings, item, raw_doc, &new_cursor)?;
             }
         }
@@ -150,35 +145,40 @@ pub fn print_pdf_object_content(
             // Do not use new cursor here.
             print_pdf_dictionary(display_settings, dict_value, raw_doc, cursor)?;
         }
-        Object::Stream(_stream_value) => {}
+        Object::Stream(stream_value) => {
+            pdf_content_stream::print_content_stream(display_settings, stream_value, cursor)?;
+        }
         Object::Reference(object_id) => {
             let mut new_cursor = cursor.add_depth(DepthInfo {
                 name: None,
                 indent_line: false,
             });
-            let ref_obj = raw_doc
-                .objects
-                .get(object_id)
-                .ok_or(Error::ObjectNotFound)?;
+            let ref_obj = match raw_doc.objects.get(object_id) {
+                Some(ref_obj) => ref_obj,
+                None => {
+                    cursor.print_subitem(
+                        ERROR_STYLE
+                            .paint("Error in PDF: Indirect Reference not found.")
+                            .to_string(),
+                        true,
+                    );
+                    return Ok(());
+                }
+            };
             let print_ref_content = if display_settings.display_parent {
                 true
             } else {
                 // false if: this reference is to its parent.
                 // true if: to a different reference.
-                !cursor.parent_refs.contains(object_id)
+                !cursor.check_parent_visited(object_id)
             };
             if print_ref_content {
-                print_subitem(
-                    cursor,
-                    get_pdf_object_info(display_settings, None, ref_obj)?,
-                    true,
-                );
-                new_cursor.parent_refs.push(*object_id);
+                cursor.print_subitem(get_pdf_object_info(display_settings, None, ref_obj)?, true);
+                new_cursor.add_parent_object_id(*object_id);
                 print_pdf_object_content(display_settings, ref_obj, raw_doc, &new_cursor)?;
             } else {
                 // So this reference is to its parent.
-                print_subitem(
-                    cursor,
+                cursor.print_subitem(
                     EXPAND_INFO_STYLE
                         .paint("... (display with `display-parent` flag)")
                         .to_string(),
@@ -190,36 +190,16 @@ pub fn print_pdf_object_content(
     Ok(())
 }
 
-fn print_subitem(cursor: &CursorInfo, text: String, last: bool) {
-    let arrow = if last { ARROW_LAST_CHAR } else { ARROW_CHAR };
-    // Create indentation
-    let mut indentation = String::new();
-    for item in &cursor.depth_info {
-        if TAB_WIDTH < 2 {
-            indentation.push_str(&" ".repeat(TAB_WIDTH - 2));
-        }
-        if item.indent_line {
-            indentation.push_str(&TREE_STYLE.paint(INDENT_CHAR).to_string());
-        } else {
-            indentation.push(' ');
-        }
-        indentation.push(' ');
-    }
-
-    println!("{}{} {}", indentation, TREE_STYLE.paint(arrow), text);
-}
-
 pub fn print_pdf_dictionary(
     display_settings: &TreeDisplaySettings,
     dict: &Dictionary,
     raw_doc: &Document,
-    cursor: &CursorInfo,
+    cursor: &TreeCursorInfo,
 ) -> Result<(), Error> {
     // Return when we should not go deeper.
-    if cursor.depth_info.len() >= display_settings.max_depth {
+    if cursor.get_depth_count() >= display_settings.max_depth {
         if !dict.is_empty() {
-            print_subitem(
-                cursor,
+            cursor.print_subitem(
                 EXPAND_INFO_STYLE
                     .paint("... (reached `max-depth`)")
                     .to_string(),
@@ -257,14 +237,12 @@ pub fn print_pdf_dictionary(
             indent_line: !is_last,
         });
 
-        print_subitem(
-            cursor,
+        cursor.print_subitem(
             get_pdf_object_info(display_settings, Some(label.clone()), obj)?,
             is_last,
         );
         if !display_settings.display_font && &label == "Font" {
-            print_subitem(
-                &new_cursor,
+            cursor.print_subitem(
                 EXPAND_INFO_STYLE
                     .paint("... (display with `display-font` flag)")
                     .to_string(),

@@ -11,6 +11,9 @@ pub struct TreeDisplaySettings {
     pub display_legend: bool,
     pub display_font: bool,
     pub display_parent: bool,
+    pub stream_enhanced_operations: bool,
+    pub stream_enhanced_operator_info: bool,
+    pub force_stream_decoding: bool,
 }
 
 impl Default for TreeDisplaySettings {
@@ -25,6 +28,9 @@ impl Default for TreeDisplaySettings {
             display_font: false,
             display_parent: false,
             display_legend: true,
+            stream_enhanced_operations: true,
+            stream_enhanced_operator_info: false,
+            force_stream_decoding: false,
         }
     }
 }

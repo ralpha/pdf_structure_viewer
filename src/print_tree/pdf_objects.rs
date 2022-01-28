@@ -52,7 +52,7 @@ pub fn get_object_print_info(
             symbol_style: Style::new(Color::Green).bold(),
             symbol: "Nm",
             type_name: "Name",
-            value: String::from_utf8_lossy(name_value).to_string(),
+            value: format!("'{}'", String::from_utf8_lossy(name_value).to_string()),
             ..Default::default()
         },
         Object::String(string_value, string_format) => match string_format {
@@ -60,7 +60,7 @@ pub fn get_object_print_info(
                 symbol_style: Style::new(Color::Yellow).bold(),
                 symbol: "az",
                 type_name: "Literal_String",
-                value: String::from_utf8_lossy(string_value).to_string(),
+                value: format!("'{}'", String::from_utf8_lossy(string_value)),
                 ..Default::default()
             },
             StringFormat::Hexadecimal => {
@@ -69,7 +69,7 @@ pub fn get_object_print_info(
                         // Shorter, so print all
                         format!("{:02x?}", string_value)
                     } else {
-                        // Longer, so make shorter
+                        // Longer, so make shorter (skip items)
                         let mut temp_string = String::new();
                         let list_count = string_value.len();
                         for (index, item) in string_value.iter().enumerate() {
@@ -85,8 +85,7 @@ pub fn get_object_print_info(
                                 temp_string.push_str(&format!(
                                     "{}, ",
                                     SKIPPED_STYLE
-                                        .paint(format!("...skipped {} bytes...", skipped_items))
-                                        .to_string(),
+                                        .paint(format!("...skipped {} bytes...", skipped_items)),
                                 ));
                                 continue;
                             } else {

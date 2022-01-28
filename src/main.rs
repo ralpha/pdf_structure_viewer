@@ -7,7 +7,7 @@ mod simple_logger;
 
 use log::LevelFilter;
 use lopdf::Document;
-use print_tree::TreeDisplaySettings;
+use print_tree::{TreeCursorSettings, TreeDisplaySettings};
 use std::{
     io::{Error, ErrorKind},
     path::PathBuf,
@@ -79,15 +79,6 @@ enum Command {
         #[structopt(long)]
         hex_display_limit: Option<usize>,
 
-        /// When added streams will be displayed.
-        ///
-        /// Options:
-        /// `no_display`|`no`: (default) Do not display streams,
-        /// `hex`: Print stream as hexadecimal array,
-        /// `tree`: (TODO) Print the stream like other objects in the tree.
-        #[structopt(long)]
-        display_stream: Option<StreamDisplay>,
-
         /// Continue expanding the tree after a `Font` items is found.
         ///
         /// Printing font data is disabled by default to reduce clutter.
@@ -103,6 +94,47 @@ enum Command {
         /// Do not print the legend on top of the output.
         #[structopt(long)]
         hide_legend: bool,
+
+        /// When added streams will be displayed.
+        ///
+        /// Options:
+        /// `no_display`|`no`: (default) Do not display streams,
+        /// `hex`: Print stream as hexadecimal array,
+        /// `tree`: (TODO) Print the stream like other objects in the tree.
+        #[structopt(long)]
+        display_stream: Option<StreamDisplay>,
+
+        /// Display stream with non-enhanced operation decoding.
+        ///
+        /// Prints stream with no simplified fields. Just print exact internal structure.
+        #[structopt(long)]
+        stream_raw_operations: bool,
+
+        /// Display stream with enhanced operation and info about each operation.
+        ///
+        /// Requires `stream_raw_operations` not to be enabled.
+        ///
+        /// Prints helpful information about each operation in the stream.
+        #[structopt(long)]
+        stream_enhanced_operator_info: bool,
+
+        /// Force the decoding of streams even if no content stream is expected.
+        ///
+        /// This might display incorrect results.
+        #[structopt(long)]
+        force_stream_decoding: bool,
+
+        /// Print line numbers.
+        #[structopt(long)]
+        print_line_numbers: bool,
+
+        /// The minimum amount of character the line will be padded to.
+        ///
+        /// Default is 4, so `   1` until `9999`.
+        ///
+        /// When the line number exceeds the padding width the number will just extend the margin.
+        #[structopt(long)]
+        line_number_padding_width: Option<u8>,
     },
     /// Print the internal structure of the PDF.
     /// This is similar to how the PDF is stored in the file.
@@ -175,32 +207,54 @@ fn main() -> Result<(), Error> {
             display_font,
             display_parent,
             hide_legend,
+            stream_raw_operations,
+            stream_enhanced_operator_info,
+            force_stream_decoding,
+            print_line_numbers,
+            line_number_padding_width,
         } => {
-            let default_settings = TreeDisplaySettings::default();
+            // Tree display settings
+            let default_tree_settings = TreeDisplaySettings::default();
             let tree_display_settings = TreeDisplaySettings {
-                max_depth: max_depth.unwrap_or(default_settings.max_depth),
+                max_depth: max_depth.unwrap_or(default_tree_settings.max_depth),
                 expand: expand.map(|path| path.split('.').map(|s| s.to_owned()).collect()),
                 display_type_names,
                 array_display_limit: match array_display_limit {
                     Some(0) => None,
                     Some(x) => Some(x),
-                    None => default_settings.array_display_limit,
+                    None => default_tree_settings.array_display_limit,
                 },
                 hex_display_limit: match hex_display_limit {
                     Some(0) => None,
                     Some(x) => Some(x),
-                    None => default_settings.hex_display_limit,
+                    None => default_tree_settings.hex_display_limit,
                 },
-                display_stream: display_stream.unwrap_or(default_settings.display_stream),
+                display_stream: display_stream.unwrap_or(default_tree_settings.display_stream),
                 display_font,
                 display_parent,
                 display_legend: !hide_legend,
+                stream_enhanced_operations: !stream_raw_operations,
+                stream_enhanced_operator_info,
+                force_stream_decoding,
             };
-            if tree_display_settings.display_stream != StreamDisplay::NoDisplay {
-                // Decode streams as this will be needed.
-                raw_doc.decompress();
-            }
-            print_tree::print_pdf_tree(&tree_display_settings, &raw_doc, file_name).unwrap();
+            // Tree cursor settings
+            let default_cursor_settings = TreeCursorSettings::default();
+            let tree_cursor_settings = TreeCursorSettings {
+                print_line_numbers,
+                line_number_padding: line_number_padding_width
+                    .unwrap_or(default_cursor_settings.line_number_padding),
+            };
+
+            // Decode streams as this will be needed.
+            raw_doc.decompress();
+            if tree_display_settings.display_stream != StreamDisplay::NoDisplay {}
+            print_tree::print_pdf_tree(
+                &tree_display_settings,
+                &tree_cursor_settings,
+                &raw_doc,
+                file_name,
+            )
+            .unwrap();
         }
         Command::Structure => {
             println!("{:#?}", raw_doc);
