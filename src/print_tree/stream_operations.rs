@@ -620,7 +620,12 @@ pub fn operation_info(
                             formatted_string.push(' ');
                         }
                     }
-                    _ => log::warn!("Only Strings and Integers expected in `TJ` operator."),
+                    Object::Real(float_value) => {
+                        if float_value.is_sign_negative() {
+                            formatted_string.push(' ');
+                        }
+                    }
+                    _ => log::warn!("Only Strings and Numbers expected in `TJ` operator."),
                 }
             }
             OperationInfo {
